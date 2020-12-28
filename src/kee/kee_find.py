@@ -15,21 +15,25 @@ def write_to_clipboard(text):
     process.communicate(text.encode("utf-8"))
 
 
-def select_path(paths):
+def select_item(items):
     fzf = FzfPrompt()
 
-    try:
-        paths = fzf.prompt(paths)
-    except plumbum.commands.processes.ProcessExecutionError:
-        paths = None
+    enumerated = (f"{n}.\t{item}" for (n, item) in enumerate(items))
 
-    if not paths:
+    try:
+        selected_items = fzf.prompt(enumerated, "-i")
+    except plumbum.commands.processes.ProcessExecutionError:
+        selected_items = None
+
+    if not selected_items:
         print("Nothing selected", file=sys.stderr)
         sys.exit(0)
 
-    (path,) = paths
+    (selected_item,) = selected_items
 
-    return path
+    selected_index = int(selected_item.split(".")[0])
+
+    return selected_index
 
 
 def get_password(args):
@@ -47,6 +51,7 @@ def output_entry(entry):
     print("url:     ", entry.url)
     if entry.password:
         write_to_clipboard(entry.password)
+        print("Password copied to clipboard")
 
 
 def main():
@@ -63,9 +68,9 @@ def main():
     db = PyKeePass(args.db.name, password=password)
 
     entries = db.entries
-    path = select_path(e.path for e in entries)
+    idx = select_item(e.title for e in entries)
 
-    (entry,) = (e for e in entries if e.path == path)
+    entry = entries[idx]
 
     output_entry(entry)
 
