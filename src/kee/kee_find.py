@@ -1,18 +1,23 @@
 import argparse
-from pykeepass import PyKeePass
+import pykeepass
 from pyfzf.pyfzf import FzfPrompt
 from argparse import ArgumentParser
 from getpass import getpass
 import sys
 import plumbum
-import subprocess
+import pyperclip
+from rich.console import Console
+from rich.table import Table
 
 
-def write_to_clipboard(text):
-    process = subprocess.Popen(
-        "pbcopy", env={"LANG": "en_US.UTF-8"}, stdin=subprocess.PIPE
-    )
-    process.communicate(text.encode("utf-8"))
+CONSOLE = Console()
+
+CONSOLE_STDERR = Console(file=sys.stderr)
+
+
+def abort(message, code=-1):
+    CONSOLE_STDERR.print(f"[red]{message}")
+    sys.exit(code)
 
 
 def select_item(items):
@@ -26,8 +31,7 @@ def select_item(items):
         selected_items = None
 
     if not selected_items:
-        print("Nothing selected", file=sys.stderr)
-        sys.exit(0)
+        abort("Nothing selected", code=0)
 
     (selected_item,) = selected_items
 
@@ -46,12 +50,42 @@ def get_password(args):
 
 
 def output_entry(entry):
-    print(entry.title)
-    print("username:", entry.username)
-    print("url:     ", entry.url)
+    properties = {}
+    properties["Username"] = entry.username
+    properties["Url"] = entry.url
+    for key, value in entry.custom_properties.items():
+        properties[key] = value
+    properties["Notes"] = entry.notes
+
+    table = Table()
+    table.title = entry.title
+    table.add_column("Field")
+    table.add_column("Value")
+
+    for key, value in properties.items():
+        if value:
+            table.add_row(key, value)
+
+    CONSOLE.print(table)
+
     if entry.password:
-        write_to_clipboard(entry.password)
-        print("Password copied to clipboard")
+        pyperclip.copy(entry.password)
+        CONSOLE.print("Password copied to clipboard")
+
+
+def output_field(name, value):
+    if value:
+        print(f"{name}: {value}")
+
+
+def open_db(filename, password):
+    try:
+        with CONSOLE.status("[bold green]Opening DB"):
+            db = pykeepass.PyKeePass(filename, password=password)
+    except pykeepass.exceptions.CredentialsError:
+        abort("Wrong credentials")
+
+    return db
 
 
 def main():
@@ -60,12 +94,11 @@ def main():
     parser.add_argument(
         "--password-from-stdin", "-p", default=False, action="store_true"
     )
-
     args = parser.parse_args()
 
     password = get_password(args)
 
-    db = PyKeePass(args.db.name, password=password)
+    db = open_db(args.db.name, password)
 
     entries = db.entries
     idx = select_item(e.title for e in entries)
