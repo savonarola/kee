@@ -6,8 +6,6 @@ This is a script which does the following:
 * Copies its `password` to the clipboard.
 * Prints `login` and `url` to stdout.
 
-Works only for Macs.
-
 ### Installation
 
 ```bash
